@@ -168,4 +168,7 @@ def get_licenses():
         logger.error(f"get_licenses 에러: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
 
