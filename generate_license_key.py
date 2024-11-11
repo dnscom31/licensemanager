@@ -9,7 +9,7 @@ import os
 SERVER_URL = 'https://licensemanager-production.up.railway.app'
 
 # 관리자 토큰 (환경 변수에서 가져옴)
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "default_admin_token")
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "6730bb41-cbb8-8004-b318-bf27d48d445f")
 
 # 로그인 정보
 CREDENTIALS = {

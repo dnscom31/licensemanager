@@ -157,6 +157,32 @@ def generate_license(request: GenerateLicenseRequest):
         logger.error(f"generate_license 에러: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+# 요청 모델 정의에 ValidateLicenseRequest 추가
+class ValidateLicenseRequest(BaseModel):
+    user_id: str
+    license_key: str
+    machine_id: str
+
+@app.post("/validate_license", response_model=dict)
+def validate_license(request: ValidateLicenseRequest):
+    logger.info(f"Validate license 요청: {request.user_id}")
+    try:
+        license = licenses_collection.find_one({
+            "user_id": request.user_id,
+            "license_key": request.license_key,
+            "is_valid": True
+        })
+        if license:
+            # 추가로 machine_id를 저장하거나 검증하려면 여기서 처리합니다.
+            logger.info("License validation successful")
+            return {"status": "valid"}
+        else:
+            logger.warning("License validation failed")
+            return {"status": "invalid"}
+    except Exception as e:
+        logger.error(f"validate_license 에러: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
 @app.get("/get_licenses", response_model=dict)
 def get_licenses():
     logger.info("Get licenses 요청")
