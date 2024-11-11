@@ -167,3 +167,5 @@ def get_licenses():
     except Exception as e:
         logger.error(f"get_licenses 에러: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+

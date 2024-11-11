@@ -23,4 +23,5 @@ COPY . /app
 EXPOSE 8000
 
 # 애플리케이션 실행
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
