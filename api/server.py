@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import secrets
 
+
 # 환경 변수 로드
 load_dotenv()
 
@@ -21,6 +22,8 @@ origins = [
     "http://localhost:8000",
     # 필요 시 추가 도메인
 ]
+
+
 
 app.add_middleware(
     CORSMiddleware,
