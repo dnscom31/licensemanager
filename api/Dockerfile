@@ -1,22 +1,17 @@
-# Use an official Python runtime as a parent image
+# 베이스 이미지 설정
 FROM python:3.9-slim
 
-# Set the working directory in the container
+# 작업 디렉토리 설정 (api 디렉토리로 이동)
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# 현재 디렉토리의 내용 복사
+COPY . /app
 
-# Copy the current directory contents into the container at /app
-COPY .. /app
-
-# Install any needed packages specified in requirements.txt
+# 필요한 패키지 설치
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port (if needed)
+# 포트 노출 (필요한 경우)
 EXPOSE 8000
 
-# Run the application
+# 애플리케이션 실행
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
