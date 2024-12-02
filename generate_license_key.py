@@ -60,9 +60,13 @@ class MainWindow:
         self.create_widgets()
         self.update_license_list()
 
-    def generate_license_key(self, user_id):
+
+    def generate_license_key(self, user_id, duration):
         try:
-            response = requests.post(f"{SERVER_URL}/generate_license", json={'user_id': user_id})
+            response = requests.post(f"{SERVER_URL}/generate_license", json={
+                'user_id': user_id,
+                'duration': duration  # 사용 기간 추가
+            })
             response.raise_for_status()
             data = response.json()
             if data.get('status') == 'generated':
@@ -124,26 +128,26 @@ class MainWindow:
 
     def on_generate(self):
         user_id = self.entry_user_id.get()
-        if not user_id:
-            messagebox.showwarning("Input Error", "Please enter a User ID.")
+        duration = self.entry_duration.get()
+
+        if not user_id or not duration.isdigit():
+            messagebox.showwarning("Input Error", "Please enter a valid User ID and Duration.")
             return
+        duration = int(duration)
 
         # 역할에 따른 처리
         if self.role == 'manager':
-            # Manager는 자신이 생성한 라이선스만 관리
-            # User ID 앞에 'manager_'를 추가하여 식별
             user_id = f"manager_{user_id}"
-            # 현재 유효한 라이선스 개수 확인
             licenses = self.fetch_licenses()
-            valid_licenses = [license for license in licenses if license['is_valid'] and license['user_id'].startswith('manager_')]
+            valid_licenses = [license for license in licenses if
+                              license['is_valid'] and license['user_id'].startswith('manager_')]
             if len(valid_licenses) >= 100:
                 messagebox.showerror("Error", "Maximum number of valid licenses (100) reached.")
                 return
 
-        license_key = self.generate_license_key(user_id)
+        license_key = self.generate_license_key(user_id, duration)  # duration 매개변수 추가
         if license_key:
             messagebox.showinfo("Success", f"License key for user {user_id} is:\n{license_key}")
-            # 라이선스 목록 갱신
             self.update_license_list()
         else:
             messagebox.showerror("Error", "Failed to generate license key.")
@@ -175,13 +179,26 @@ class MainWindow:
         # 역할에 따른 필터링
         if self.role == 'manager':
             # Manager는 자신이 생성한 라이선스만 필터링
-            licenses = [license for license in licenses if license['is_valid'] and license['user_id'].startswith('manager_')]
+            licenses = [license for license in licenses if
+                        license['is_valid'] and license['user_id'].startswith('manager_')]
         else:
             # Master는 모든 유효한 라이선스를 표시
             licenses = [license for license in licenses if license['is_valid']]
         # 트리에 항목 추가
         for idx, license in enumerate(licenses, start=1):
-            self.tree.insert('', 'end', values=(idx, license['user_id'], license['license_key']))
+            # 만료일 가져오기
+            expiry_date = license.get('expiry_date')
+            if expiry_date:
+                # 문자열로 변환 (예: 'YYYY-MM-DD HH:MM:SS')
+                expiry_date_str = expiry_date.split('.')[0]  # 밀리초 제거
+            else:
+                expiry_date_str = 'N/A'  # 만료일이 없으면 표시하지 않음
+            self.tree.insert('', 'end', values=(
+                idx,
+                license['user_id'],
+                license['license_key'],
+                expiry_date_str  # 만료일 추가
+            ))
 
     def on_tree_select(self, event):
         selected_item = self.tree.selection()
@@ -207,6 +224,11 @@ class MainWindow:
         self.entry_user_id = tk.Entry(frame_left, width=30)
         self.entry_user_id.pack(padx=5, pady=5)
 
+        label_duration = tk.Label(frame_left, text="License Duration (days):")
+        label_duration.pack(padx=5, pady=5)
+        self.entry_duration = tk.Entry(frame_left, width=30)
+        self.entry_duration.pack(padx=5, pady=5)
+
         button_generate = tk.Button(frame_left, text="Generate License", command=self.on_generate)
         button_generate.pack(padx=5, pady=5)
 
@@ -214,16 +236,21 @@ class MainWindow:
         label_license_list = tk.Label(frame_right, text="License List:")
         label_license_list.pack(padx=5, pady=5)
 
-        columns = ('number', 'user_id', 'license_key')
+        # 'expiry_date' 열 추가
+        columns = ('number', 'user_id', 'license_key', 'expiry_date')
         self.tree = ttk.Treeview(frame_right, columns=columns, show='headings')
+
+        # 각 열의 헤딩 설정
         self.tree.heading('number', text='Number')
         self.tree.heading('user_id', text='User ID')
         self.tree.heading('license_key', text='License Key')
+        self.tree.heading('expiry_date', text='Expiry Date')  # 만료일 열 추가
 
         # 열 너비 조정
         self.tree.column('number', width=50, anchor='center')
         self.tree.column('user_id', width=150, anchor='center')
         self.tree.column('license_key', width=400)
+        self.tree.column('expiry_date', width=150, anchor='center')  # 만료일 열 너비 설정
 
         self.tree.pack(padx=5, pady=5, fill='both', expand=True)
 
@@ -239,6 +266,8 @@ class MainWindow:
 
         # Treeview에서 항목 선택 시 이벤트 바인딩
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
+
+
 
 def main():
     root = tk.Tk()

@@ -9,7 +9,9 @@ import logging
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import secrets
-
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from typing import Optional
 
 # 환경 변수 로드
 load_dotenv()
@@ -66,6 +68,12 @@ class License(BaseModel):
     license_key: str
     is_valid: bool = True
 
+class License(BaseModel):
+    user_id: str
+    license_key: str
+    is_valid: bool = True
+    expiry_date: datetime  # 만료일 추가
+
 class RegisterRequest(BaseModel):
     user_id: str
     license_key: str
@@ -76,6 +84,7 @@ class InvalidateRequest(BaseModel):
 
 class GenerateLicenseRequest(BaseModel):
     user_id: str
+    duration: Optional[int] = None
 
 # 인증 종속성
 def verify_admin_token(request: InvalidateRequest):
@@ -84,6 +93,17 @@ def verify_admin_token(request: InvalidateRequest):
         raise HTTPException(status_code=403, detail="Invalid admin token.")
     return True
 
+def delete_expired_licenses():
+    result = licenses_collection.delete_many({
+        "expiry_date": {"$lt": datetime.utcnow()}
+    })
+    if result.deleted_count > 0:
+        logger.info(f"Deleted {result.deleted_count} expired licenses.")
+
+# 애플리케이션 시작 시 스케줄러 설정
+scheduler = BackgroundScheduler()
+scheduler.add_job(delete_expired_licenses, 'interval', hours=1)  # 1시간마다 실행
+scheduler.start()
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
@@ -131,24 +151,29 @@ def invalidate_license(request: InvalidateRequest, valid: bool = Depends(verify_
 def generate_license(request: GenerateLicenseRequest):
     logger.info(f"Generate license 요청: {request.user_id}")
     try:
-        # 유저 ID에 기반한 고유한 라이선스 키 생성
-        license_key = secrets.token_hex(16)  # 32자리 16진수 키 생성
+        # 라이선스 키 생성 및 중복 확인
+        for _ in range(5):
+            license_key = secrets.token_hex(16)  # 32자리 16진수 키 생성
+            if not licenses_collection.find_one({"license_key": license_key}):
+                break
+        else:
+            logger.error("Failed to generate a unique license key after multiple attempts.")
+            raise HTTPException(status_code=500, detail="Failed to generate a unique license key.")
 
-        # 라이선스 중복 확인
-        if licenses_collection.find_one({"license_key": license_key}):
-            logger.warning("Generated license key already exists, regenerating...")
-            # 재생성 시도
-            for _ in range(5):
-                license_key = secrets.token_hex(16)
-                if not licenses_collection.find_one({"license_key": license_key}):
-                    break
-            else:
-                logger.error("Failed to generate a unique license key after multiple attempts.")
-                raise HTTPException(status_code=500, detail="Failed to generate a unique license key.")
+        # 만료일 계산
+        if request.duration and request.duration > 0:
+            expiry_date = datetime.utcnow() + timedelta(days=request.duration)
+        else:
+            expiry_date = None  # 영구 라이선스
 
         # 라이선스 객체 생성 및 데이터베이스에 저장
-        license = License(user_id=request.user_id, license_key=license_key)
+        license = License(
+            user_id=request.user_id,
+            license_key=license_key,
+            expiry_date=expiry_date
+        )
         licenses_collection.insert_one(license.dict())
+
         logger.info("License 생성 및 등록 성공")
         return {"status": "generated", "license_key": license_key}
     except HTTPException as he:
@@ -157,7 +182,6 @@ def generate_license(request: GenerateLicenseRequest):
         logger.error(f"generate_license 에러: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-# 요청 모델 정의에 ValidateLicenseRequest 추가
 # 요청 모델 정의에 ValidateLicenseRequest 추가
 class ValidateLicenseRequest(BaseModel):
     user_id: str
@@ -173,6 +197,15 @@ def validate_license(request: ValidateLicenseRequest):
             "is_valid": True
         })
         if license:
+            # 만료일 확인
+            if 'expiry_date' in license and license['expiry_date'] < datetime.utcnow():
+                # 라이선스가 만료되었으면 무효화
+                licenses_collection.update_one(
+                    {"license_key": request.license_key},
+                    {"$set": {"is_valid": False}}
+                )
+                logger.warning("License has expired")
+                return {"status": "expired"}
             logger.info("License validation successful")
             return {"status": "valid"}
         else:
@@ -183,16 +216,22 @@ def validate_license(request: ValidateLicenseRequest):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
+
 @app.get("/get_licenses", response_model=dict)
 def get_licenses():
     logger.info("Get licenses 요청")
     try:
-        licenses = list(licenses_collection.find({}, {"_id": 0}))
+        licenses = list(licenses_collection.find({}, {"_id": 0, "user_id": 1, "license_key": 1, "is_valid": 1, "expiry_date": 1}))
+        # 만료일이 datetime 객체이므로, 문자열로 변환
+        for license in licenses:
+            if 'expiry_date' in license and license['expiry_date']:
+                license['expiry_date'] = license['expiry_date'].isoformat()
         logger.info("Get licenses 성공")
         return {"status": "success", "licenses": licenses}
     except Exception as e:
         logger.error(f"get_licenses 에러: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 
 
