@@ -283,3 +283,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+#pyinstaller --icon=kakao.ico --onefile --noconsole generate_license_key.py

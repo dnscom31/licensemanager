@@ -219,6 +219,7 @@ def validate_license(request: ValidateLicenseRequest):
 
 @app.get("/get_licenses", response_model=dict)
 def get_licenses():
+def get_licenses():
     logger.info("Get licenses 요청")
     try:
         licenses = list(licenses_collection.find({}, {"_id": 0, "user_id": 1, "license_key": 1, "is_valid": 1, "expiry_date": 1}))
